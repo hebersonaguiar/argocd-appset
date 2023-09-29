@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: gitops-argocd
+  namespace: argocd
+spec:
+  generators:
+    - git:
+       repoURL: https://github.com/hebersonaguiar/argocd-apps.git
+       revision: HEAD
+       files:
+       - path: apps/*/*/config.json
+  syncPolicy:
+      preserveResourcesOnDeletion: true
+  template:
+    metadata:
+      name: '{{labels.name}}-{{labels.env}}'
+      labels:
+        env: '{{labels.env}}'
+    spec:
+      project: '{{labels.env}}'
+      ignoreDifferences:
+      - group: "*"
+        kind: "Namespace"
+        jsonPointers:
+          - /metadata/labels
+          - /metadata/annotations
+      - group: "apps"
+        kind: "Deployment"
+        jsonPointers:
+          - /spec/template/metadata/labels/timestamp
+          - /spec/strategy/rollingUpdate/maxSurge
+      destination:
+        namespace: '{{destination.namespace}}'
+        name: '{{destination.name}}'
+      source:
+        repoURL: '{{source.repo}}'
+        path: '{{source.path}}'
+        targetRevision: HEAD
+        helm:
+          valueFiles:
+            - '{{source.values}}'
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: false
+          allowEmpty: false
+        syncOptions:
+        - RespectIgnoreDifferences=true
+        - CreateNamespace=true
+        retry:
+          limit: 4
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 10m
